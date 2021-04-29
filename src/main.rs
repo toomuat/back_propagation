@@ -34,32 +34,33 @@ fn main() -> std::io::Result<()> {
     let input = File::open(filename)?;
     let buffered = BufReader::new(input);
     let mut data: Vec<Vec<f64>> = Vec::new();
+    let mut train: Vec<f64> = Vec::new();
 
     for line in buffered.lines() {
         let line_string = line.unwrap().to_string();
         let split = line_string.split_whitespace();
         let vec_line = split.collect::<Vec<&str>>();
-        let vec_f64 = vec_line.iter().map(|v| v.parse::<f64>().unwrap()).collect::<Vec<f64>>();
-        println!("{:?}", vec_f64);
-        //println!("{:?}", vec_line);
+        let vec_f64 = vec_line.iter()
+            .enumerate()
+            .filter(|&(i, _v)| i != 2 as usize)
+            .map(|(_i, v)| v.parse::<f64>().unwrap())
+            .collect::<Vec<f64>>();
+        //println!("{:?}", vec_f64);
 
         data.push(vec_f64);
-
-        //println!("{}", vec_line[0]);
-        //println!("{}", vec_line[0].parse::<f64>().unwrap());
+        //train.push(vec_line.parse::<f64>());
     }
 
     //println!("{:?}", data);
-    println!("\n{:?}", data[0]);
-    println!("{:?}", data[1]);
-    println!("{}", data[1][0]);
-
 
     let eta = 0.01;
     //println!("{}", sigmod(eta));
     //println!("{}", sigmod_diff(eta));
 
-    let times = 100;
+    let times = 1;
+
+    for _ in 0..times {
+    }
 
     Ok(())
 }
