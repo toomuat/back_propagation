@@ -32,8 +32,7 @@ fn main() -> std::io::Result<()> {
     
     let input = File::open(filename)?;
     let buffered = BufReader::new(input);
-    let mut split;
-    let mut line_string;
+
     for line in buffered.lines() {
         //println!("{}", line?);
         //println!("{}", line.unwrap());
@@ -48,10 +47,12 @@ fn main() -> std::io::Result<()> {
         //split = line.unwrap().split_whitespace();
         //split = line.unwrap().to_string().split_whitespace();
         
-        line_string = line.unwrap().to_string();
+        let line_string = line.unwrap().to_string();
         //println!("{}", line_string);
-        split = line_string.split_whitespace();
-        println!("{:?}", split.collect::<Vec<&str>>());
+        let split = line_string.split_whitespace();
+        let vec_line = split.collect::<Vec<&str>>();
+        println!("{:?}", vec_line);
+        //println!("{:?}", split.collect::<Vec<&str>>());
     }
 
     Ok(())
