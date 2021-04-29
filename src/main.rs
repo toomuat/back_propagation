@@ -37,10 +37,11 @@ fn main() -> std::io::Result<()> {
     let mut train: Vec<f64> = Vec::new();
 
     for line in buffered.lines() {
-        let line_string = line.unwrap().to_string();
+        let line_string: String = line.unwrap().to_string();
         let split = line_string.split_whitespace();
-        let vec_line = split.collect::<Vec<&str>>();
-        let vec_f64 = vec_line.iter()
+        let vec_line: Vec<&str> = split.collect::<Vec<&str>>();
+        //println!("{:?}", vec_line);
+        let vec_f64: Vec<f64> = vec_line.iter()
             .enumerate()
             .filter(|&(i, _v)| i != 2 as usize)
             .map(|(_i, v)| v.parse::<f64>().unwrap())
@@ -48,10 +49,11 @@ fn main() -> std::io::Result<()> {
         //println!("{:?}", vec_f64);
 
         data.push(vec_f64);
-        //train.push(vec_line.parse::<f64>());
+        train.push(vec_line[2].parse::<f64>().unwrap());
     }
 
     //println!("{:?}", data);
+    //println!("{:?}", train);
 
     let eta = 0.01;
     //println!("{}", sigmod(eta));
