@@ -32,6 +32,7 @@ fn main() -> std::io::Result<()> {
     let mut data: Vec<Vec<f64>> = Vec::new();
     let mut train: Vec<f64> = Vec::new();
 
+    // 訓練データと正解データ
     for line in buffered.lines() {
         let line_string: String = line.unwrap().to_string();
         let split = line_string.split_whitespace();
@@ -113,7 +114,7 @@ fn print_type_of<T>(_: &T) {
 }
 
 fn sigmod(u: f64) -> f64 {
-    1. / (1. + u.exp())
+    1. / (1. + (-u).exp())
 }
 
 fn sigmod_diff(u: f64) -> f64 {
