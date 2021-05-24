@@ -10,8 +10,8 @@ fn main() -> std::io::Result<()> {
     // 乱数で初期の重みを設定
     let w_mid_to_out: Vec<f64> = (0..3).map(|_| rng.gen_range(-5.0..5.0)).collect();
     let w_in_to_mid: Vec<f64> = (0..9).map(|_| rng.gen_range(-5.0..5.0)).collect();
-    let mut mat_w_mid_to_out = Array::from_shape_vec((1, 3), w_mid_to_out).unwrap();
-    let mut mat_w_in_to_mid = Array::from_shape_vec((3, 3), w_in_to_mid).unwrap();
+    let mat_w_mid_to_out = Array::from_shape_vec((1, 3), w_mid_to_out).unwrap();
+    let mat_w_in_to_mid = Array::from_shape_vec((3, 3), w_in_to_mid).unwrap();
 
     // 訓練用データを生成してファイルに格納する
     // sqrt(x1^2 + x2^2)
@@ -53,9 +53,9 @@ fn main() -> std::io::Result<()> {
 
     // 訓練データ
     let data_arr2: Array2<f64> = data.iter().map(|v| [v[0], v[1], 1.0]).collect::<Vec<_>>().into(); // [1000, 2]
-    let data_rev = data_arr2.reversed_axes(); // [3, 1000]
+    let _data_rev = data_arr2.reversed_axes(); // [3, 1000]
 
-    let eta = 0.05; // 学習率
+    let eta = 0.1; // 学習率
     let times = 1000;
 
     let filename = "loss.txt";
@@ -71,11 +71,11 @@ fn main() -> std::io::Result<()> {
 
     // println!("{}", input.get((0, 0)).unwrap());
 
-    let mut flag = true;
+    let mut _flag = true;
 
     for t in 0..times {
-        let mut j: f64 = 0.0;
-        let mut j_sum: f64 = 0.0;
+        let mut j: f64;
+        let mut _j_sum: f64 = 0.0;
 
         for i in 0..data_num {
             let x: ArrayBase<ndarray::OwnedRepr<f64>, _> = input
@@ -84,22 +84,27 @@ fn main() -> std::io::Result<()> {
             let u: ArrayBase<ndarray::OwnedRepr<f64>, _> = m1.dot(&x); // [3, 3] * [3, 1]
             let y = u.map(|i| sigmod(*i)); // [3, 1]
             let v = m2.dot(&y); // [1, 3] * [3, 1]
-            let z = &v; // [1, 1]
-
-            // println!("{:?}", *u.get((0, 0)).unwrap());
-            // println!("{:?}", u[0]);
-            // println!("{:?}", u.shape());
-            // loop{}
+            let z = v; // [1, 1]
 
             j = train_mat[[0, i]] - z[0];
-            j_sum += j.powf(2f64) / 2f64;
-            if flag {
-                write!(file2, "{}\n", format!("{} {}", t*1000 + i, j.powf(2f64) / 2f64))?;
+            _j_sum += j.powf(2f64) / 2f64;
+
+            if t == 0 && i < 100 {
+                let x2: ArrayBase<ndarray::OwnedRepr<f64>, _> = input
+                    .slice(s![0, ..])
+                    .to_owned();
+                let u2: ArrayBase<ndarray::OwnedRepr<f64>, _> = m1.dot(&x2); // [3, 3] * [3, 1]
+                let y2 = u2.map(|i| sigmod(*i)); // [3, 1]
+                let v2: Array1<f64> = m2.dot(&y2); // [1, 3] * [3, 1]
+                let z2 = v2;
+                let j2  = train_mat[[0, 0]] - z2[0];
+
+                write!(file2, "{}\n", format!("{} {}", i, j2.powf(2f64) / 2f64))?;
             }
 
             // 中間→出力層結合w_kjの更新
             // m2: [1, 3]
-            for l in 0..y.len() {
+            for l in 0..3 {
                 m2[[0, l]] = m2[[0, l]] + eta * j * 1.0 * y[l];
             }
 
@@ -107,20 +112,16 @@ fn main() -> std::io::Result<()> {
             // m1: [3, 3]
             for l in 0..3 {
                 for m in 0..3 {
-                    let x = *input.get((i, m)).unwrap();
-                    let diff = eta * m2[[0, l]] * j * 1.0 * sigmod_diff(u[l]) * x;
+                    let x = *input.get((i, l)).unwrap();
+                    let diff = eta * m2[[0, m]] * j * 1.0 * sigmod_diff(u[m]) * x;
 
-                    // let diff = eta *
-                    //     (&m2 * j * 1.0) // [1, 3]
-                    //     .dot(&u.map(|i| sigmod_diff(*i))) * // [3, 1]
-                    //     (*input.get((i, m)).unwrap());
-
-                    m1[[l, m]] = m1[[l, m]] + diff;
+                    m1[[m, l]] = m1[[m, l]] + diff;
+                    // m1[[l, m]] = m1[[l, m]] + diff;
                 }
             }
         }
-        // write!(file2, "{}\n", format!("{} {}", t, j_sum))?;
-        flag = false;
+        // write!(file2, "{}\n", format!("{} {}", t, _j_sum))?;
+        _flag = false;
     }
 
     let filename2 = "result.txt";
@@ -145,6 +146,12 @@ fn main() -> std::io::Result<()> {
 
 fn func(x1: f64, x2: f64) -> f64 {
     (x1.powf(2.0) + x2.powf(2.0)).sqrt()
+    // 8.0 * (-x1.powf(2.0) - x2.powf(2.0)).exp() * (0.1 + x1 * (x2 - 0.5))
+
+    /*
+    splot [-2:2] [-2:2] sqrt(x**2 + y**2)
+    splot [-2:2] [-2:2] 8 * exp(-x**2 - y**2) * (0.1 + x*(y - 0.5))
+    */
 }
 
 fn sigmod(u: f64) -> f64 {
