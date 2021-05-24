@@ -55,75 +55,64 @@ fn main() -> std::io::Result<()> {
     let data_arr2: Array2<f64> = data.iter().map(|v| [v[0], v[1], 1.0]).collect::<Vec<_>>().into(); // [1000, 2]
     let data_rev = data_arr2.reversed_axes(); // [3, 1000]
 
-    let eta = 0.05; // 学習率
-
-    let times = 100;
-
-    /*
-    w_kj(t + 1) = w_kj(t) - η ∂J(w)/∂w_kj
-
-    ∂J(w)/∂w_kj = ∂J/∂z_k・∂z_k/∂v_k・∂v_k/∂w_k j
-    ∂J/∂z_k = -(t_k - z_k)
-    ∂z_k/∂v_k = f'(v_k)
-    */
+    let eta = 0.1; // 学習率
+    let times = 1000;
 
     let filename = "loss.txt";
     let mut file2 = File::create(filename)?;
 
-    for i in 0..times {
-        // 順伝播（forward-propagation）
-        // println!("{}", mat_w_in_to_mid);
-        let u = mat_w_in_to_mid.dot(&data_rev); // (3, 3) * (3, 1000)
-        let y = u.map(|i| sigmod(*i)); // (3, 1000)
-        let v = mat_w_mid_to_out.dot(&y); // (1, 3) * (3, 1000)
-        // let z = v.map(|i| sigmod(*i)); // (1, 1000)
-        let z = &v; // (1, 1000)
+    let input: Array2<f64> = data // [1000, 3]
+        .iter()
+        .map(|v| [v[0], v[1], 1.0])
+        .collect::<Vec<_>>()
+        .into();
+    let mut m1 = mat_w_in_to_mid; // [3, 3]
+    let mut m2 = mat_w_mid_to_out; // [3, 1]
 
-        let data_rev2 = data_rev
-            .to_owned()
-            .reversed_axes(); // (n, 2)
+    // println!("{}", input.get((0, 0)).unwrap());
 
-        let j = &train_mat - z; // ∂J/∂z (1, 1000)
+    let mut flag = true;
 
-        // イテレーションごとのロスを合計してファイルに書き込む
-        let loss = j
-            .to_owned()
-            .reversed_axes();
-        write!(file2, "{}\n", format!("{} {}", i,
-            loss.map(|x| *x).
-            fold(0 as f64, |acc, i| acc + (*i).powf(2f64)) / 2f64))?;
-        // println!("{:?}", loss.shape()); // [n, 1]
+    for t in 0..times {
+        let mut j: f64 = 0.0;
+        let mut j_sum: f64 = 0.0;
 
-        // 誤差逆伝播法（BackPropagation）
-        // 中間→出力層結合w_kjの更新
-        mat_w_mid_to_out = mat_w_mid_to_out +
-            eta * (&j)
-            .dot(&y.reversed_axes()); // (1, n) * (n, 3)
+        for i in 0..data_num {
+            let x: ArrayBase<ndarray::OwnedRepr<f64>, _> = input
+                .slice(s![i, ..])
+                .to_owned();
+            let u: ArrayBase<ndarray::OwnedRepr<f64>, _> = m1.dot(&x); // [3, 3] * [3, 1]
+            let y = u.map(|i| sigmod(*i)); // [3, 1]
+            let v = m2.dot(&y); // [1, 3] * [3, 1]
+            let z = &v; // [1, 1]
 
-        // mat_w_mid_to_out = // (1, 3)
-        //     mat_w_mid_to_out
-        //     + eta * (&j * v.map(|i| sigmod_diff(*i)))
-        //     .dot(&y.reversed_axes()); // (1, n) * (n, 3)
+            j = train_mat[[0, i]] - z[0];
+            j_sum += j.powf(2f64) / 2f64;
+            if flag {
+                write!(file2, "{}\n", format!("{} {}", t*1000 + i, j.powf(2f64) / 2f64))?;
+            }
 
-        let mat_w_mid_to_out2 = mat_w_mid_to_out
-            .to_owned()
-            .reversed_axes(); // (3, 1)
+            // 中間→出力層結合w_kjの更新
+            // m2: [1, 3]
+            for l in 0..y.len() {
+                m2[[0, l]] = m2[[0, l]] + eta * j * 1.0 * y[l];
+            }
 
-        // 入力→中間層結合w_jiの更新
-        mat_w_in_to_mid = mat_w_in_to_mid // (3, 3)
-            + eta *
-                (&mat_w_mid_to_out2 // (3, 1)
-                .dot(&j) // (1, 1000)
-                * u.map(|i| sigmod_diff(*i))) // (3, 1000)
-                .dot(&data_rev2); // (1000, 3)
+            // 入力→中間層結合w_jiの更新
+            // m1: [3, 3]
+            for l in 0..3 {
+                for m in 0..3 {
+                    let diff = eta *
+                        (&m2 * j * 1.0) // [1, 3]
+                        .dot(&u.map(|i| sigmod_diff(*i))) *
+                        (*input.get((i, m)).unwrap());
 
-        // mat_w_in_to_mid = mat_w_in_to_mid // (3, 2)
-        //     + eta
-        //         * (&mat_w_mid_to_out2.dot( // (3, 1)
-        //             &(&j * v.map(|i| sigmod_diff(*i))) // (1, n)
-        //         )
-        //         * u.map(|i| sigmod_diff(*i)))  // (3, n)
-        //         .dot(&data_rev2); // (n, 2)
+                    m1[[l, m]] = m1[[l, m]] + diff[0];
+                }
+            }
+        }
+        // write!(file2, "{}\n", format!("{} {}", t, j_sum))?;
+        flag = false;
     }
 
     let filename2 = "result.txt";
@@ -135,10 +124,10 @@ fn main() -> std::io::Result<()> {
         let x2 = rng.gen_range(-2.0..2.0);
         let x = Array::from_shape_vec((3, 1), vec![x1, x2, 1.0]).unwrap();
 
-        let u = mat_w_in_to_mid.dot(&x); // (3, 2) * (2, 1)
+        let u = m1.dot(&x); // (3, 3) * (3, 1)
         let y = u.map(|i| sigmod(*i)); // (3, 1)
-        let v = mat_w_mid_to_out.dot(&y); // (1, 3) * (3, 1)
-        let z = v.map(|i| sigmod(*i)); // (1, 1)
+        let v = m2.dot(&y); // (1, 3) * (3, 1)
+        let z = v;
 
         write!(file, "{}\n", format!("{} {} {}", x1, x2, z[[0, 0]]))?;
     }
@@ -148,11 +137,6 @@ fn main() -> std::io::Result<()> {
 
 fn func(x1: f64, x2: f64) -> f64 {
     (x1.powf(2.0) + x2.powf(2.0)).sqrt()
-}
-
-#[allow(dead_code)]
-fn print_type_of<T>(_: &T) {
-    println!("{}", std::any::type_name::<T>())
 }
 
 fn sigmod(u: f64) -> f64 {
