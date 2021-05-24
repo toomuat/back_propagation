@@ -55,7 +55,7 @@ fn main() -> std::io::Result<()> {
     let data_arr2: Array2<f64> = data.iter().map(|v| [v[0], v[1], 1.0]).collect::<Vec<_>>().into(); // [1000, 2]
     let data_rev = data_arr2.reversed_axes(); // [3, 1000]
 
-    let eta = 0.1; // 学習率
+    let eta = 0.05; // 学習率
     let times = 1000;
 
     let filename = "loss.txt";
@@ -86,6 +86,11 @@ fn main() -> std::io::Result<()> {
             let v = m2.dot(&y); // [1, 3] * [3, 1]
             let z = &v; // [1, 1]
 
+            // println!("{:?}", *u.get((0, 0)).unwrap());
+            // println!("{:?}", u[0]);
+            // println!("{:?}", u.shape());
+            // loop{}
+
             j = train_mat[[0, i]] - z[0];
             j_sum += j.powf(2f64) / 2f64;
             if flag {
@@ -102,12 +107,15 @@ fn main() -> std::io::Result<()> {
             // m1: [3, 3]
             for l in 0..3 {
                 for m in 0..3 {
-                    let diff = eta *
-                        (&m2 * j * 1.0) // [1, 3]
-                        .dot(&u.map(|i| sigmod_diff(*i))) *
-                        (*input.get((i, m)).unwrap());
+                    let x = *input.get((i, m)).unwrap();
+                    let diff = eta * m2[[0, l]] * j * 1.0 * sigmod_diff(u[l]) * x;
 
-                    m1[[l, m]] = m1[[l, m]] + diff[0];
+                    // let diff = eta *
+                    //     (&m2 * j * 1.0) // [1, 3]
+                    //     .dot(&u.map(|i| sigmod_diff(*i))) * // [3, 1]
+                    //     (*input.get((i, m)).unwrap());
+
+                    m1[[l, m]] = m1[[l, m]] + diff;
                 }
             }
         }
