@@ -1,0 +1,6 @@
+
+gnuplot -e 'splot "data.txt" with points pt 7 ps 0.5; pause -1'
+gnuplot -e 'splot "result.txt" with points pt 7 ps 0.5; pause -1'
+
+gnuplot -e 'plot "loss.txt" with lines; pause -1'
+

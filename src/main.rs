@@ -9,9 +9,9 @@ fn main() -> std::io::Result<()> {
 
     // 乱数で初期の重みを設定
     let w_mid_to_out: Vec<f64> = (0..3).map(|_| rng.gen_range(-5.0..5.0)).collect();
-    let w_in_to_mid: Vec<f64> = (0..6).map(|_| rng.gen_range(-5.0..5.0)).collect();
+    let w_in_to_mid: Vec<f64> = (0..9).map(|_| rng.gen_range(-5.0..5.0)).collect();
     let mut mat_w_mid_to_out = Array::from_shape_vec((1, 3), w_mid_to_out).unwrap();
-    let mut mat_w_in_to_mid = Array::from_shape_vec((3, 2), w_in_to_mid).unwrap();
+    let mut mat_w_in_to_mid = Array::from_shape_vec((3, 3), w_in_to_mid).unwrap();
 
     // 訓練用データを生成してファイルに格納する
     // sqrt(x1^2 + x2^2)
@@ -44,54 +44,96 @@ fn main() -> std::io::Result<()> {
             .map(|(_i, v)| v.parse::<f64>().unwrap())
             .collect::<Vec<f64>>();
 
-        data.push(vec_f64);
-        train.push(vec_line[2].parse::<f64>().unwrap());
+        data.push(vec_f64); // x1, x2 訓練データ
+        train.push(vec_line[2].parse::<f64>().unwrap()); // y 教師データ
     }
 
-    let train_mat = Array::from_shape_vec((1, data_num), train).unwrap();
-    let data_arr2: Array2<f64> = data.iter().map(|v| [v[0], v[1]]).collect::<Vec<_>>().into();
-    let data_rev = data_arr2.reversed_axes();
+    // 教師データ
+    let train_mat = Array::from_shape_vec((1, data_num), train).unwrap(); // 1xN
 
-    let eta = 0.1;
+    // 訓練データ
+    let data_arr2: Array2<f64> = data.iter().map(|v| [v[0], v[1], 1.0]).collect::<Vec<_>>().into(); // [1000, 2]
+    let data_rev = data_arr2.reversed_axes(); // [3, 1000]
 
-    let times = 1000;
+    let eta = 0.05; // 学習率
 
-    for _ in 0..times {
+    let times = 100;
+
+    /*
+    w_kj(t + 1) = w_kj(t) - η ∂J(w)/∂w_kj
+
+    ∂J(w)/∂w_kj = ∂J/∂z_k・∂z_k/∂v_k・∂v_k/∂w_k j
+    ∂J/∂z_k = -(t_k - z_k)
+    ∂z_k/∂v_k = f'(v_k)
+    */
+
+    let filename = "loss.txt";
+    let mut file2 = File::create(filename)?;
+
+    for i in 0..times {
+        // 順伝播（forward-propagation）
         // println!("{}", mat_w_in_to_mid);
-        let u = mat_w_in_to_mid.dot(&data_rev); // (3, 2) * (2, n)
-        // println!("{}", u);
-        let y = u.map(|i| sigmod(*i)); // (3, n)
-        // println!("{}", y);
-        let v = mat_w_mid_to_out.dot(&y); // (1, 3) * (3, n)
-        let z = v.map(|i| sigmod(*i)); // (1, n)
+        let u = mat_w_in_to_mid.dot(&data_rev); // (3, 3) * (3, 1000)
+        let y = u.map(|i| sigmod(*i)); // (3, 1000)
+        let v = mat_w_mid_to_out.dot(&y); // (1, 3) * (3, 1000)
+        // let z = v.map(|i| sigmod(*i)); // (1, 1000)
+        let z = &v; // (1, 1000)
 
-        let data_rev2 = data_rev.to_owned().reversed_axes();
+        let data_rev2 = data_rev
+            .to_owned()
+            .reversed_axes(); // (n, 2)
 
-        let j = &train_mat - z; // ∂J/∂z (1, n)
+        let j = &train_mat - z; // ∂J/∂z (1, 1000)
 
-        mat_w_mid_to_out = // (1, 3)
-            mat_w_mid_to_out
-            + eta * (&j * v.map(|i| sigmod_diff(*i)))
+        // イテレーションごとのロスを合計してファイルに書き込む
+        let loss = j
+            .to_owned()
+            .reversed_axes();
+        write!(file2, "{}\n", format!("{} {}", i,
+            loss.map(|x| *x).
+            fold(0 as f64, |acc, i| acc + (*i).powf(2f64)) / 2f64))?;
+        // println!("{:?}", loss.shape()); // [n, 1]
+
+        // 誤差逆伝播法（BackPropagation）
+        // 中間→出力層結合w_kjの更新
+        mat_w_mid_to_out = mat_w_mid_to_out +
+            eta * (&j)
             .dot(&y.reversed_axes()); // (1, n) * (n, 3)
 
-        let mat_w_mid_to_out2 = mat_w_mid_to_out.to_owned().reversed_axes();
+        // mat_w_mid_to_out = // (1, 3)
+        //     mat_w_mid_to_out
+        //     + eta * (&j * v.map(|i| sigmod_diff(*i)))
+        //     .dot(&y.reversed_axes()); // (1, n) * (n, 3)
 
-        mat_w_in_to_mid = mat_w_in_to_mid // (3, 2)
-            + eta
-                * (&mat_w_mid_to_out2.dot( // (3, 1)
-                    &(&j * v.map(|i| sigmod_diff(*i))) // (1, n)
-                )
-                * u.map(|i| sigmod_diff(*i)))  // (3, n)
-                .dot(&data_rev2); // (n, 2)
+        let mat_w_mid_to_out2 = mat_w_mid_to_out
+            .to_owned()
+            .reversed_axes(); // (3, 1)
+
+        // 入力→中間層結合w_jiの更新
+        mat_w_in_to_mid = mat_w_in_to_mid // (3, 3)
+            + eta *
+                (&mat_w_mid_to_out2 // (3, 1)
+                .dot(&j) // (1, 1000)
+                * u.map(|i| sigmod_diff(*i))) // (3, 1000)
+                .dot(&data_rev2); // (1000, 3)
+
+        // mat_w_in_to_mid = mat_w_in_to_mid // (3, 2)
+        //     + eta
+        //         * (&mat_w_mid_to_out2.dot( // (3, 1)
+        //             &(&j * v.map(|i| sigmod_diff(*i))) // (1, n)
+        //         )
+        //         * u.map(|i| sigmod_diff(*i)))  // (3, n)
+        //         .dot(&data_rev2); // (n, 2)
     }
 
     let filename2 = "result.txt";
     let mut file = File::create(filename2)?;
 
+    // 学習した重みをもとにデータを出力
     for _ in 0..data_num {
         let x1 = rng.gen_range(-2.0..2.0);
         let x2 = rng.gen_range(-2.0..2.0);
-        let x = Array::from_shape_vec((2, 1), vec![x1, x2]).unwrap();
+        let x = Array::from_shape_vec((3, 1), vec![x1, x2, 1.0]).unwrap();
 
         let u = mat_w_in_to_mid.dot(&x); // (3, 2) * (2, 1)
         let y = u.map(|i| sigmod(*i)); // (3, 1)
@@ -115,6 +157,7 @@ fn print_type_of<T>(_: &T) {
 
 fn sigmod(u: f64) -> f64 {
     1. / (1. + (-u).exp())
+    // 1. / (1. + f64::exp(-u))
 }
 
 fn sigmod_diff(u: f64) -> f64 {
