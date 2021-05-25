@@ -8,110 +8,93 @@ fn main() -> std::io::Result<()> {
     let mut rng = rand::thread_rng();
 
     // 乱数で初期の重みを設定
-    let w_mid_to_out: Vec<f64> = (0..3).map(|_| rng.gen_range(-5.0..5.0)).collect();
-    let w_in_to_mid: Vec<f64> = (0..9).map(|_| rng.gen_range(-5.0..5.0)).collect();
-    let mat_w_mid_to_out = Array::from_shape_vec((1, 3), w_mid_to_out).unwrap();
-    let mat_w_in_to_mid = Array::from_shape_vec((3, 3), w_in_to_mid).unwrap();
+    let mat_w_mid_to_out = Array::from_shape_vec((1, 10),
+        (0..10)
+            .map(|_| rng.gen_range(-5.0..5.0))
+            .collect::<Vec<f64>>())
+            .unwrap();
+    let mat_w_in_to_mid = Array::from_shape_vec((10, 3),
+        (0..30)
+            .map(|_| rng.gen_range(-5.0..5.0))
+            .collect::<Vec<f64>>())
+            .unwrap();
 
     // 訓練用データを生成してファイルに格納する
-    // sqrt(x1^2 + x2^2)
     let filename = "data.txt";
     let mut file = File::create(filename)?;
     let data_num = 1000;
+    let mut data: Vec<Vec<f64>> = Vec::new();
+    let mut train: Vec<f64> = Vec::new();
 
     for _ in 0..data_num {
         let x1 = rng.gen_range(-2.0..2.0);
         let x2 = rng.gen_range(-2.0..2.0);
         let z = func(x1, x2);
 
+        data.push(vec![x1, x2]);
+        train.push(z);
+
         write!(file, "{}\n", format!("{} {} {}", x1, x2, z))?;
     }
-
-    let input = File::open(filename)?;
-    let buffered = BufReader::new(input);
-    let mut data: Vec<Vec<f64>> = Vec::new();
-    let mut train: Vec<f64> = Vec::new();
-
-    // 訓練データと正解データ
-    for line in buffered.lines() {
-        let line_string: String = line.unwrap().to_string();
-        let split = line_string.split_whitespace();
-        let vec_line: Vec<&str> = split.collect::<Vec<&str>>();
-        let vec_f64: Vec<f64> = vec_line
-            .iter()
-            .enumerate()
-            .filter(|&(i, _v)| i != 2 as usize)
-            .map(|(_i, v)| v.parse::<f64>().unwrap())
-            .collect::<Vec<f64>>();
-
-        data.push(vec_f64); // x1, x2 訓練データ
-        train.push(vec_line[2].parse::<f64>().unwrap()); // y 教師データ
-    }
-
-    // 教師データ
-    let train_mat = Array::from_shape_vec((1, data_num), train).unwrap(); // 1xN
-
-    // 訓練データ
-    let data_arr2: Array2<f64> = data.iter().map(|v| [v[0], v[1], 1.0]).collect::<Vec<_>>().into(); // [1000, 2]
-    let _data_rev = data_arr2.reversed_axes(); // [3, 1000]
 
     let eta = 0.1; // 学習率
     let times = 1000;
 
     let filename = "loss.txt";
-    let mut file2 = File::create(filename)?;
+    let mut file = File::create(filename)?;
 
+    // 教師データ
+    let train_mat = Array::from_shape_vec((1, data_num), train).unwrap(); // [1, N]
+    // 訓練データ
     let input: Array2<f64> = data // [1000, 3]
         .iter()
         .map(|v| [v[0], v[1], 1.0])
         .collect::<Vec<_>>()
         .into();
-    let mut m1 = mat_w_in_to_mid; // [3, 3]
-    let mut m2 = mat_w_mid_to_out; // [3, 1]
-
-    // println!("{}", input.get((0, 0)).unwrap());
+    let mut m1 = mat_w_in_to_mid; // [10, 3]
+    let mut m2 = mat_w_mid_to_out; // [1, 10]
 
     let mut _flag = true;
 
     for t in 0..times {
         let mut j: f64;
-        let mut _j_sum: f64 = 0.0;
+        let mut j_sum: f64 = 0.0;
 
         for i in 0..data_num {
             let x: ArrayBase<ndarray::OwnedRepr<f64>, _> = input
                 .slice(s![i, ..])
                 .to_owned();
-            let u: ArrayBase<ndarray::OwnedRepr<f64>, _> = m1.dot(&x); // [3, 3] * [3, 1]
-            let y = u.map(|i| sigmod(*i)); // [3, 1]
-            let v = m2.dot(&y); // [1, 3] * [3, 1]
+            let u: ArrayBase<ndarray::OwnedRepr<f64>, _> = m1.dot(&x); // [10, 3] * [3, 1]
+            let y = u.map(|i| sigmod(*i)); // [10, 1]
+            let v = m2.dot(&y); // [1, 10] * [10, 1]
             let z = v; // [1, 1]
 
             j = train_mat[[0, i]] - z[0];
-            _j_sum += j.powf(2f64) / 2f64;
+            j_sum += j.powf(2f64) / 2f64;
 
-            if t == 0 && i < 100 {
-                let x2: ArrayBase<ndarray::OwnedRepr<f64>, _> = input
-                    .slice(s![0, ..])
-                    .to_owned();
-                let u2: ArrayBase<ndarray::OwnedRepr<f64>, _> = m1.dot(&x2); // [3, 3] * [3, 1]
-                let y2 = u2.map(|i| sigmod(*i)); // [3, 1]
-                let v2: Array1<f64> = m2.dot(&y2); // [1, 3] * [3, 1]
-                let z2 = v2;
-                let j2  = train_mat[[0, 0]] - z2[0];
+            // if t == 0 && i < 100 {
+            //     let x2: ArrayBase<ndarray::OwnedRepr<f64>, _> = input
+            //         .slice(s![0, ..])
+            //         .to_owned();
+            //     let u2: ArrayBase<ndarray::OwnedRepr<f64>, _> = m1.dot(&x2); // [10, 3] * [3, 1]
+            //     let y2 = u2.map(|i| sigmod(*i)); // [10, 1]
+            //     let v2: Array1<f64> = m2.dot(&y2); // [1, 10] * [10, 1]
+            //     let z2 = v2;
+            //     let j2  = train_mat[[0, 0]] - z2[0];
 
-                write!(file2, "{}\n", format!("{} {}", i, j2.powf(2f64) / 2f64))?;
-            }
+            //     write!(file, "{}\n", format!("{} {}", i, j2.powf(2f64) / 2f64))?;
+            // }
 
             // 中間→出力層結合w_kjの更新
-            // m2: [1, 3]
-            for l in 0..3 {
+            // m2: [1, 10]
+            for l in 0..m2.len() {
                 m2[[0, l]] = m2[[0, l]] + eta * j * 1.0 * y[l];
             }
 
             // 入力→中間層結合w_jiの更新
-            // m1: [3, 3]
-            for l in 0..3 {
-                for m in 0..3 {
+            // m1: [10, 3]
+            for l in 0..x.len() { // 0..3
+                for m in 0..m1.shape()[0] { // 0..10
                     let x = *input.get((i, l)).unwrap();
                     let diff = eta * m2[[0, m]] * j * 1.0 * sigmod_diff(u[m]) * x;
 
@@ -120,7 +103,9 @@ fn main() -> std::io::Result<()> {
                 }
             }
         }
-        // write!(file2, "{}\n", format!("{} {}", t, _j_sum))?;
+        if t < 500 {
+            write!(file, "{}\n", format!("{} {}", t, j_sum))?;
+        }
         _flag = false;
     }
 
@@ -145,8 +130,8 @@ fn main() -> std::io::Result<()> {
 }
 
 fn func(x1: f64, x2: f64) -> f64 {
-    (x1.powf(2.0) + x2.powf(2.0)).sqrt()
-    // 8.0 * (-x1.powf(2.0) - x2.powf(2.0)).exp() * (0.1 + x1 * (x2 - 0.5))
+    // (x1.powf(2.0) + x2.powf(2.0)).sqrt()
+    8.0 * (-x1.powf(2.0) - x2.powf(2.0)).exp() * (0.1 + x1 * (x2 - 0.5))
 
     /*
     splot [-2:2] [-2:2] sqrt(x**2 + y**2)
