@@ -8,6 +8,7 @@ pub struct Network {
     w: Vec<ArrayBase<ndarray::OwnedRepr<f64>, Dim<[usize; 2]>>>,
     in_num: usize,
     out_num: usize,
+    calc: Vec<(Vec<f64>, Vec<f64>)>,
     rng: rand::rngs::ThreadRng,
 }
 
@@ -17,11 +18,16 @@ impl Network {
             w: vec![],
             in_num: in_num,
             out_num: out_num,
+            calc: vec![],
             rng: rand::thread_rng(),
         }
     }
 
     pub fn add_hidden_layer(mut self, node_num: usize) -> Self {
+        if node_num != self.w[1].len() {
+            panic!("invalid node num");
+        }
+
         if self.w.len() == 0 {
             let w1 = Array::from_shape_vec((node_num, self.in_num),
                 (0..(node_num * self.in_num))
@@ -37,9 +43,6 @@ impl Network {
             self.w.push(w1);
             self.w.push(w2);
         } else {
-            let hidden_layer_num = self.w.len() - 1;
-            // let node_num ;
-
             let w = Array::from_shape_vec((node_num, node_num),
                 (0..(node_num * node_num))
                     .map(|_| self.rng.gen_range(-5.0..5.0))
@@ -54,26 +57,42 @@ impl Network {
 
     pub fn forward(self, input: &Vec<f64>) -> Vec<f64> {
         let mut u;
-        let mut y;
-        let mut v;
-        let mut x = Array::from_shape_vec((1, input.len()), input.clone()).unwrap();
+        let mut x = Array::from_shape_vec(
+        (1, input.len()), input.clone()).unwrap();
 
         for i in 0..self.w.len() {
             u = self.w[i].dot(&x);
-            y = u.map(|i| sigmod(*i));
-            v = self.w[i + 1].dot(&y); // [1, 10] * [10, 1]
-            x = v;
+            if i != self.w.len() - 1 {
+                x = u.map(|i| sigmod(*i));
+                // self.calc.push((x, u));
+            } else {
+                x = u;
+            }
         }
 
-        // let ret: Vec<f64> = v.into()
-        //     .collect::<Vec<f64>>();
-        // ret
-
-        vec![]
+        x.into_shape(self.out_num)
+            .unwrap()
+            .to_vec()
     }
 
-    pub fn backward() {
-        unimplemented!()
+    pub fn backward(&mut self, iter: usize, input: &Vec<f64>) -> Self {
+        // 隠れ層→出力層
+        let mut w_out = *self.w.last().unwrap();
+        for i in 0..w_out.shape()[0] {
+            for j in 0..w_out.shape()[1] {
+                // w_out[[i, j]] = w_out[[i, j]] + 0.01 * (tk - zk) * (zk * (1 - zk)) * yi;
+            }
+        }
+
+        // 入力層→隠れ層
+
+        for i in 0..iter {
+            for j in 0..input.len() {
+                unimplemented!()
+            }
+        }
+
+        self
     }
 }
 
