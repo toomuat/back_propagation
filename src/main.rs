@@ -8,11 +8,13 @@ fn main() -> std::io::Result<()> {
     let mut rng = rand::thread_rng();
 
     // 乱数で初期の重みを設定
+    // 中間→出力層結合w_kj
     let mut m2 = Array::from_shape_vec((1, 10),
         (0..10)
             .map(|_| rng.gen_range(-5.0..=5.0))
             .collect::<Vec<f64>>())
             .unwrap();
+    // 入力→中間層結合w_ji
     let mut m1 = Array::from_shape_vec((10, 3),
         (0..30)
             .map(|_| rng.gen_range(-5.0..=5.0))
